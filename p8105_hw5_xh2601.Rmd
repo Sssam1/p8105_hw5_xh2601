@@ -69,20 +69,152 @@ bday_sim_results =
     prob_repeat = mean(result)
   )
 
-# make a dot point, with x-axis being group size, y-axis being the probability
+# make a dot point, with x-axis being group size, y-axis being the probability of having repeated birthday
 bday_sim_results |> 
   ggplot(aes(x = group_sz, y = prob_repeat)) +
   geom_point() +
   geom_line() +
-  labs(title = "Probability of Shared Birthdays Across Group Size", x = "Group Size", y = "Probability of Repeated Birthdays") +
+  labs(
+    title = "Probability of Shared Birthdays Across Group Size", 
+    x = "Group Size", 
+    y = "Probability of Repeated Birthdays") +
   scale_y_continuous(
     labels = scales::label_percent(scale = 100))
 ```
 
-Based on the plot, in group size between 2 to 50, the probability of at least two people sharing a birthday follows a S-shaped curve. The probability is approaching 0% when the group size is 2; it is above 50% when group size is larger than or equals to 23 people; and it approaches 100% when the group size gets larger. The probability of at least two people sharing a birthday among 50 people is very high.
+Based on the plot, in group size between 2 to 50, the probability of at least two people sharing a birthday approximately follows a S-shaped curve. The probability is approaching 0% when the group size is 2; it is above 50% when group size is larger than or equals to 23 people; and it approaches 100% when the group size gets larger. The probability of at least two people sharing a birthday among 50 people is very high.
 
+## Problem 2
 
+Generate a dataset from the model x~Normal[µ,σ], with fixed n = 30, σ = 5.
 
+```{r}
+# create a function to generate a dataset of a normal model with fixed n and sigma
+norm_fixed = function(mu, sigma = 5, n = 30) {
+  x = rnorm(n = n, mean = mu, sd = sigma)
+  x
+}
+```
 
+Conduct one-sample t-test of H: µ = 0 using α = 0.05.
+
+```{r}
+# create a function to generate the t test output with H_null: mu = 0 using alpha = 0.05
+t_test_fixed = function(dataset, h0_mu = 0, alpha = 0.05) {
+  t_result = 
+    t.test(x = dataset, mu = h0_mu, conf.level = 1 - alpha) |> 
+    broom::tidy()
+  t_result
+}
+```
+
+1. Set µ = 0. Generate 5000 datasets from the model. For each dataset, save µ_hat and the p-value arising from a test.
+
+```{r}
+# use expand_grid() to create a dataframe for mu = 0 with 5000 times iteration
+# use map() to call norm_fixed() fuction with mu = 0
+# use map() to call t_test_fixed() fuction with dataset = dataset_vec
+# use mutate() to store the result from map()
+# unnest the t test result from t_test_fixed() fuction
+# keep mu, iteration number, mu_hat, and p_value from the test
+datasets_sim_df_0 = 
+  expand_grid(
+    mu = 0,
+    iter = 1:5000
+  ) |> 
+  mutate(
+    dataset_vec = map(mu, norm_fixed),
+    t_result = map(dataset_vec, t_test_fixed)
+  ) |> 
+  unnest(t_result) |> 
+  select(mu, iter, mu_hat = estimate, p_value = p.value)
+```
+
+2. Repeat the above for µ = {1,2,3,4,5,6}. 
+
+```{r}
+# use expand_grid() to create a dataframe for mu = {0,1,2,3,4,5,6} with 5000 times iteration
+# repeat the above steps
+datasets_sim_df = 
+  expand_grid(
+    mu = 0:6,
+    iter = 1:5000
+  ) |> 
+  mutate(
+    dataset_vec = map(mu, norm_fixed),
+    t_result = map(dataset_vec, t_test_fixed)
+  ) |> 
+  unnest(t_result) |> 
+  select(mu, iter, mu_hat = estimate, p_value = p.value)
+```
+
+3. Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of µ on the x axis. Describe the association between effect size and power.
+
+```{r}
+# define the variable 'reject': reject null if p value < alpha (=0.05)
+# group by true value of mu
+# get the proportion of rejecting null
+# make a dot plot with line, with x-axis being true value of mu, y-axis being the proportion of times the null was rejected
+datasets_sim_df |> 
+  mutate(
+    reject = p_value < 0.05
+  ) |> 
+  group_by(mu) |> 
+  summarize(
+    reject_prop = mean(reject)
+  ) |> 
+  ggplot(aes(x = mu, y = reject_prop)) +
+  geom_point() +
+  geom_line() +
+  labs(
+    title = expression("Power of the Test Across True Values of " * mu),
+    x = expression(mu),
+    y = "Power (Null Rejection Proportion)") +
+  scale_x_continuous(
+    breaks = seq(0, 6, 1)) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale = 100))
+```
+
+In this simulation, the effect size (e.g., Cohen’s d: d = (µ-µ0)/sigma) only depends on the true value of µ. For µ = 0, 1, 2, 3, 4, 5, 6, their effect sizes are 0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2 respectively. As effect size increases, the power (proportion of times the null was rejected) increases, and their association approximately follows a S-shaped curve. When effect size is 0, the power is very low (below 10%); when effect size is 0.4, power is around 50%; and when effect size is larger than 1, power is approaching 100%.
+
+4. Make a plot showing the average estimate of µ_hat on the y axis and the true value of µ on the x axis. Make a second plot (or overlay on the first) the average estimate of µ_hat only in samples for which the null was rejected on the y axis and the true value of µ on the x axis. 
+
+```{r}
+# define the variable 'reject': reject null if p value < alpha (=0.05)
+# group by true value of mu
+# get the mean of mu_hat for all datasets and for datasets that reject null
+# make two dot plots with line, with x-axis being true value of mu, y-axis being mu_hat
+datasets_sim_df |> 
+  mutate(
+    reject = p_value < 0.05
+  ) |>
+  group_by(mu) |> 
+  summarize(
+    mu_hat_mean = mean(mu_hat),
+    mu_hat_rejected_mean = mean(mu_hat[reject])
+  ) |> 
+  ggplot(aes(x = mu)) +
+  geom_point(aes(y = mu_hat_mean, color = "All Datasets")) +
+  geom_line(aes(y = mu_hat_mean, color = "All Datasets")) +
+  geom_point(aes(y = mu_hat_rejected_mean, color = "Null Rejected Datasets")) +
+  geom_line(aes(y = mu_hat_rejected_mean, color = "Null Rejected Datasets")) +
+  labs(
+    title = expression("Average Estimate of " * hat(mu) * " Across True Values of " * mu),
+    x = expression(mu),
+    y = expression(hat(mu)),
+    color = "Dataset Included") +
+  scale_x_continuous(
+    breaks = seq(0, 6, 1)) +
+  scale_y_continuous(
+    breaks = seq(0, 6, 1)) +
+  theme(
+    axis.title.y = element_text(angle = 0, vjust = 0.5)
+  )
+```
+
+5. Is the sample average of µ_hat across tests for which the null is rejected approximately equal to the true value of µ? Why or why not?
+
+The sample averages of µ_hat across tests for which the null is rejected are larger than the true value of µ when µ is small, but approximately equal to the true value of µ when µ is large. This is because across tests for which the null is rejected, their µ_hat would be significantly higher than 0 to be rejected, and this group of tests on average has a higher µ_hat value campared to the true value of µ. However, when true value of µ becomes larger, the effect size increases and so does the power, which means that most of the datasets reject null at a higher µ. Therefore, the sample averages of µ_hat across tests for which the null is rejected approximately equal to the sample averages of µ_hat across all tests for a given µ value, which approximates the true value of µ.
 
 
