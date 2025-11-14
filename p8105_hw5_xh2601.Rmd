@@ -13,8 +13,9 @@ The general format for plots making
 ```{r}
 knitr::opts_chunk$set(
   fig.width = 6,
-  fig.asp = .6,
-  out.width = "90%"
+  fig.asp = .8,
+  out.width = "90%",
+  dpi = 200
 )
 
 theme_set(
@@ -217,4 +218,109 @@ datasets_sim_df |>
 
 The sample averages of µ_hat across tests for which the null is rejected are larger than the true value of µ when µ is small, but approximately equal to the true value of µ when µ is large. This is because across tests for which the null is rejected, their µ_hat would be significantly higher than 0 to be rejected, and this group of tests on average has a higher µ_hat value campared to the true value of µ. However, when true value of µ becomes larger, the effect size increases and so does the power, which means that most of the datasets reject null at a higher µ. Therefore, the sample averages of µ_hat across tests for which the null is rejected approximately equal to the sample averages of µ_hat across all tests for a given µ value, which approximates the true value of µ.
 
+## Problem 3
 
+1. Describe the raw data. 
+```{r}
+# import the dataset
+homicide_df = read_csv("data/homicide-data.csv") |> 
+  janitor::clean_names()
+```
+
+This dataset contains information on 52,179 homicides that occurred in 51 American cities. For each homicide case, the dataset may include the following details: case ID, date reported, victim information (first name, last name, race, age, and sex), location (city, state, latitude, and longitude), and the case disposition.
+
+2. Create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
+
+```{r}
+# use mutate() to create the city_state variable
+# use mutate() to create a variable to indicate whether the case is unsolved
+# group by city_state
+# summarize the total cases and unsolved cases
+homicide_sum_df = homicide_df |> 
+  mutate(
+    city_state = str_c(city, ", ", state),
+    unsolved = (disposition %in% c("Closed without arrest", "Open/No arrest"))
+  ) |> 
+  group_by(city_state) |> 
+  summarize(
+    n_total = n(),
+    n_unsolved = sum(unsolved, na.rm = TRUE)
+  )
+```
+
+3. For the city of Baltimore, MD, use the prop.test function to estimate the proportion of homicides that are unsolved; save the output of prop.test as an R object, apply the broom::tidy to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
+
+```{r}
+# for the city of Baltimore, MD
+baltimore = homicide_sum_df |> 
+  filter(city_state == "Baltimore, MD")
+
+# save the output of prop.test as an R object
+proportion_baltimore = 
+  prop.test(
+    x = baltimore$n_unsolved,
+    n = baltimore$n_total)
+
+# pull the estimated proportion and confidence intervals
+proportion_baltimore |> 
+  broom::tidy() |> pull(estimate)
+
+proportion_baltimore |> 
+  broom::tidy() |> pull(conf.low)
+
+proportion_baltimore |> 
+  broom::tidy() |> pull(conf.high)
+  
+```
+
+4. Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each.
+
+```{r}
+# create a function to get the proportion and confidence interval, takes the number of unsolved homicides and total homicides
+prop_test_homicide = function(x, n) {
+  proportion = 
+    prop.test(
+      x = x,
+      n = n) |> 
+    broom::tidy()
+  
+  # return the proportion and confidence interval
+  tibble(
+    unsolved_prop = proportion |> pull(estimate),
+    conf_low = proportion |> pull(conf.low),
+    conf_high = proportion |> pull(conf.high)
+  )
+}
+```
+ 
+```{r}
+# update the dataframe with estimated proportions and CIs for each city using map2
+# use map2() to apply the prop_test_homicide() function with x = n_unsolved, n = n_total
+# use mutate() to add a column to store the output from prop_test_homicide()
+# use unnest() to show estimates and CIs
+homicide_sum_df = homicide_sum_df |>
+  mutate(
+    prop_test_result = map2(n_unsolved, n_total, prop_test_homicide)
+  ) |> 
+  unnest(prop_test_result)
+```
+
+5. Create a plot that shows the estimates and CIs for each city
+
+```{r, fig.width = 8, fig.height = 15, out.width = "90%"}
+homicide_sum_df |> 
+  mutate(
+    city_state = fct_reorder(city_state, unsolved_prop)
+  ) |> 
+  ggplot(aes(y = city_state, x = unsolved_prop)) +
+  geom_point(size = 1.2) +
+  geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.5, alpha = 0.5) +
+  labs(
+    title = "Proportion of Unsolved Homicides Across Cities",
+    x = "Proportion of Unsolved Homicides",
+    y = "City, State") +
+  scale_x_continuous(
+    labels = scales::label_percent(accuracy = 1),
+    breaks = seq(0, 1, 0.1),
+  ) 
+```
