@@ -227,7 +227,15 @@ homicide_df = read_csv("data/homicide-data.csv") |>
   janitor::clean_names()
 ```
 
-This dataset contains information on 52,179 homicides that occurred in 51 American cities. For each homicide case, the dataset may include the following details: case ID, date reported, victim information (first name, last name, race, age, and sex), location (city, state, latitude, and longitude), and the case disposition.
+This raw dataset contains information on 52,179 homicides that occurred in 51 American city-state combinations. For each homicide case, the dataset may include the following details: case ID, date reported, victim information (first name, last name, race, age, and sex), location (city, state, latitude, and longitude), and the case disposition. 
+
+However, in this dataset, one row included a homicide case listed as occurring in Tulsa, AL. Since there is no city named Tulsa in the state of Alabama, this entry was identified as invalid and removed. In summary, the cleaned dataset contains information on 52,178 homicides that occurred across 50 major U.S. cities.
+
+```{r}
+# use filter() remove the invalid row
+homicide_df = homicide_df |> 
+  filter(!(city == "Tulsa" & state == "AL"))
+```
 
 2. Create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
 
@@ -303,6 +311,7 @@ homicide_sum_df = homicide_sum_df |>
     prop_test_result = map2(n_unsolved, n_total, prop_test_homicide)
   ) |> 
   unnest(prop_test_result)
+homicide_sum_df
 ```
 
 5. Create a plot that shows the estimates and CIs for each city
@@ -317,7 +326,7 @@ homicide_sum_df |>
   geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.5, alpha = 0.5) +
   labs(
     title = "Proportion of Unsolved Homicides Across Cities",
-    x = "Proportion of Unsolved Homicides",
+    x = "Proportion of Unsolved Homicides (with 95% Confidence Interval)",
     y = "City, State") +
   scale_x_continuous(
     labels = scales::label_percent(accuracy = 1),
