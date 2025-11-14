@@ -267,18 +267,15 @@ baltimore = homicide_sum_df |>
 proportion_baltimore = 
   prop.test(
     x = baltimore$n_unsolved,
-    n = baltimore$n_total)
+    n = baltimore$n_total) |> 
+  broom::tidy()
 
 # pull the estimated proportion and confidence intervals
-proportion_baltimore |> 
-  broom::tidy() |> pull(estimate)
-
-proportion_baltimore |> 
-  broom::tidy() |> pull(conf.low)
-
-proportion_baltimore |> 
-  broom::tidy() |> pull(conf.high)
-  
+tibble(
+    unsolved_prop = proportion_baltimore |> pull(estimate),
+    conf_low = proportion_baltimore |> pull(conf.low),
+    conf_high = proportion_baltimore |> pull(conf.high)
+)
 ```
 
 4. Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each.
@@ -306,11 +303,13 @@ prop_test_homicide = function(x, n) {
 # use map2() to apply the prop_test_homicide() function with x = n_unsolved, n = n_total
 # use mutate() to add a column to store the output from prop_test_homicide()
 # use unnest() to show estimates and CIs
+# use select() to remove the number columns
 homicide_sum_df = homicide_sum_df |>
   mutate(
     prop_test_result = map2(n_unsolved, n_total, prop_test_homicide)
   ) |> 
-  unnest(prop_test_result)
+  unnest(prop_test_result) |> 
+  select(-n_unsolved, -n_total)
 homicide_sum_df
 ```
 
